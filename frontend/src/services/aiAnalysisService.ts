@@ -230,7 +230,9 @@ export async function analyzeMedia(
   }
 
   try {
-    const response = await fetch("/api/analyze-traffic", {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+    const endpoint = `${baseUrl}/api/analyze-traffic`;
+    const response = await fetch(endpoint, {
       method: "POST",
       body: formData
     });
