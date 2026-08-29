@@ -25,6 +25,15 @@ import {
 import { useViolations, useRecentViolations } from "./hooks/useViolations";
 import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 
+function getEvidenceVideoForRecord(record: ViolationRecord): string | undefined {
+  if (record.evidence_video_url) return record.evidence_video_url;
+  const v = (record.violation || "").toLowerCase();
+  if (v.includes("helmet")) return "/videos/no-helmet.mp4";
+  if (v.includes("red")) return "/videos/red-light.mp4";
+  if (v.includes("triple")) return "/videos/triple-riding.mp4";
+  return undefined;
+}
+
 type IconProps = SVGProps<SVGSVGElement>;
 
 const motionInitial = { filter: "blur(10px)", opacity: 0, y: 20 };
@@ -542,15 +551,28 @@ function DetectionFrame({
   className = "",
   dense = false,
   mediaPreview = null,
+  videoUrl = null,
 }: {
   boxes: DetectionBox[];
   label?: string;
   className?: string;
   dense?: boolean;
   mediaPreview?: UploadedTrafficMedia | null;
+  videoUrl?: string | null;
 }) {
   return (
     <div className={`feed-surface relative overflow-hidden rounded-[1.25rem] ${className}`}>
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          className="absolute inset-0 h-full w-full object-cover opacity-80"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        />
+      ) : null}
       {mediaPreview?.kind === "video" ? (
         <video
           src={mediaPreview.previewUrl}
@@ -566,7 +588,7 @@ function DetectionFrame({
       {mediaPreview?.kind === "image" ? (
         <img src={mediaPreview.previewUrl} alt={`${mediaPreview.name} preview`} className="absolute inset-0 h-full w-full object-cover opacity-85" />
       ) : null}
-      <div className={`absolute inset-0 feed-grid ${mediaPreview ? "opacity-55" : ""}`} aria-hidden="true" />
+      <div className={`absolute inset-0 feed-grid ${mediaPreview || videoUrl ? "opacity-45" : ""}`} aria-hidden="true" />
       <div className="absolute inset-0 scan-line" aria-hidden="true" />
       <div className="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
         <StatusPill active>LIVE</StatusPill>
@@ -579,23 +601,6 @@ function DetectionFrame({
         </div>
         <div className="liquid-glass rounded-full px-3 py-1 font-body text-xs text-white/90">96.8% confidence</div>
       </div>
-      {boxes.map((box) => (
-        <div
-          key={`${box.label}-${box.left}-${box.top}`}
-          className={`detection-box detection-${box.variant}`}
-          style={{
-            left: `${box.left}%`,
-            top: `${box.top}%`,
-            width: `${box.width}%`,
-            height: `${box.height}%`,
-          }}
-        >
-          <span>
-            {box.label}
-            {box.confidence ? ` ${box.confidence}%` : ""}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -822,7 +827,7 @@ function Dashboard({ onSelectViolation }: { onSelectViolation: (record: Violatio
                 </div>
                 <StatusPill active>Operational</StatusPill>
               </div>
-              <DetectionFrame boxes={overviewBoxes} label="Current detected violations" className="min-h-[360px]" />
+              <DetectionFrame boxes={overviewBoxes} label="Current detected violations" className="min-h-[360px]" videoUrl="/videos/dashboard-ai-video.mp4" />
             </div>
           </Reveal>
 
@@ -1034,7 +1039,7 @@ function AIAnalysis({ onSelectViolation }: { onSelectViolation: (record: Violati
                 </div>
                 <StatusPill active>Processing</StatusPill>
               </div>
-              <DetectionFrame boxes={cameraFeeds[0].boxes} label="Object detection active" className="min-h-[420px]" />
+              <DetectionFrame boxes={cameraFeeds[0].boxes} label="Object detection active" className="min-h-[420px]" videoUrl="/videos/dashboard-ai-video.mp4" />
             </div>
           </Reveal>
 
@@ -1237,7 +1242,7 @@ function History({ onSelectViolation }: { onSelectViolation: (record: ViolationR
 function HistoryRecord({ record, onSelectViolation }: { record: ViolationRecord; onSelectViolation: (record: ViolationRecord) => void }) {
   return (
     <article className="liquid-glass grid gap-4 rounded-[1.25rem] p-4 md:grid-cols-[170px_1fr_auto] md:items-center">
-      <DetectionFrame boxes={cameraFeeds[0].boxes.slice(0, 2)} label={record.camera} className="min-h-[130px]" dense />
+      <DetectionFrame boxes={cameraFeeds[0].boxes.slice(0, 2)} label={record.camera} className="min-h-[130px]" dense videoUrl={getEvidenceVideoForRecord(record)} />
       <div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <StatusPill>{record.id}</StatusPill>
@@ -1399,7 +1404,7 @@ function ViolationDetailModal({ record, onClose }: { record: ViolationRecord; on
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.25fr_0.85fr]">
-          <DetectionFrame boxes={cameraFeeds[0].boxes} label={`${record.camera} evidence`} className="min-h-[460px]" />
+          <DetectionFrame boxes={cameraFeeds[0].boxes} label={`${record.camera} evidence`} className="min-h-[460px]" videoUrl={getEvidenceVideoForRecord(record)} />
 
           <div className="grid gap-4">
             <div className="liquid-glass rounded-[1.25rem] p-5">

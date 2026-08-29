@@ -83,15 +83,15 @@ export const violationDistribution = [
 ];
 
 export const recentViolations: ViolationRecord[] = [
-  { id: "VIO-2048", violation: "No Helmet", vehicle: "Motorcycle", plate: "KA 03 HM 4821", location: "Central Junction", camera: "CAM-07", date: "2026-08-28", time: "18:42", confidence: 96.8, status: "Pending Review", severity: "High" },
-  { id: "VIO-2047", violation: "Red Light Violation", vehicle: "Sedan", plate: "KA 05 MP 1190", location: "Eastbound Signal", camera: "CAM-12", date: "2026-08-28", time: "18:36", confidence: 94.1, status: "Verified", severity: "Critical" },
-  { id: "VIO-2046", violation: "Triple Riding", vehicle: "Motorcycle", plate: "KA 01 EL 7743", location: "Market Road", camera: "CAM-18", date: "2026-08-28", time: "18:21", confidence: 92.4, status: "Pending Review", severity: "Medium" },
-  { id: "VIO-2045", violation: "No Helmet", vehicle: "Scooter", plate: "KA 04 RT 3388", location: "Central Junction", camera: "CAM-07", date: "2026-08-28", time: "18:08", confidence: 89.7, status: "Resolved", severity: "High" },
+  { id: "VIO-2048", violation: "No Helmet", vehicle: "Motorcycle", plate: "KA 03 HM 4821", location: "Central Junction", camera: "CAM-07", date: "2026-08-28", time: "18:42", confidence: 96.8, status: "Pending Review", severity: "High", evidence_video_url: "/videos/no-helmet.mp4" },
+  { id: "VIO-2047", violation: "Red Light Violation", vehicle: "Sedan", plate: "KA 05 MP 1190", location: "Eastbound Signal", camera: "CAM-12", date: "2026-08-28", time: "18:36", confidence: 94.1, status: "Verified", severity: "Critical", evidence_video_url: "/videos/red-light.mp4" },
+  { id: "VIO-2046", violation: "Triple Riding", vehicle: "Motorcycle", plate: "KA 01 EL 7743", location: "Market Road", camera: "CAM-18", date: "2026-08-28", time: "18:21", confidence: 92.4, status: "Pending Review", severity: "Medium", evidence_video_url: "/videos/triple-riding.mp4" },
+  { id: "VIO-2045", violation: "No Helmet", vehicle: "Scooter", plate: "KA 04 RT 3388", location: "Central Junction", camera: "CAM-07", date: "2026-08-28", time: "18:08", confidence: 89.7, status: "Resolved", severity: "High", evidence_video_url: "/videos/no-helmet.mp4" },
 ];
 
 export const historyRecords: ViolationRecord[] = [...recentViolations,
   { id: "VIO-2044", violation: "Wrong Lane", vehicle: "Hatchback", plate: "KA 02 NN 6102", location: "Ring Road", camera: "CAM-04", date: "2026-08-28", time: "17:54", confidence: 88.5, status: "Escalated", severity: "Medium" },
-  { id: "VIO-2043", violation: "No Helmet", vehicle: "Motorcycle", plate: "KA 09 QW 2901", location: "Market Road", camera: "CAM-18", date: "2026-08-28", time: "17:39", confidence: 91.2, status: "Verified", severity: "High" },
+  { id: "VIO-2043", violation: "No Helmet", vehicle: "Motorcycle", plate: "KA 09 QW 2901", location: "Market Road", camera: "CAM-18", date: "2026-08-28", time: "17:39", confidence: 91.2, status: "Verified", severity: "High", evidence_video_url: "/videos/no-helmet.mp4" },
 ];
 
 export const analysisResults = recentViolations.slice(0, 3);

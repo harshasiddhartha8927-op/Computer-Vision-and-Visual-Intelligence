@@ -77,7 +77,7 @@ function SparklesIcon({ className = "w-5 h-5" }: { className?: string }) {
 // Sample Preset Files for quick testing
 const SAMPLE_FILES = [
   { name: "Central_Junction_Frame.jpg", kind: "image" as const, url: "/videos/sample-traffic.jpg", size: 2450000 },
-  { name: "Highway_Monitor_Clip.mp4", kind: "video" as const, url: "/videos/bg-video-3.mp4", size: 14800000 }
+  { name: "Highway_Monitor_Clip.mp4", kind: "video" as const, url: "/videos/dashboard-ai-video.mp4", size: 14800000 }
 ];
 
 export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (record: any) => void }) {
