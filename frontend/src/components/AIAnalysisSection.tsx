@@ -7,7 +7,10 @@ import {
   MediaAnalysisResult,
   ViolationItem,
   TimelineEvent,
-  SeverityLevel
+  SeverityLevel,
+  noViolationResult,
+  fallbackImageResult,
+  fallbackVideoResult
 } from "../services/aiAnalysisService";
 
 // Helper for formatting file size
@@ -77,7 +80,8 @@ function SparklesIcon({ className = "w-5 h-5" }: { className?: string }) {
 // Sample Preset Files for quick testing
 const SAMPLE_FILES = [
   { name: "Central_Junction_Frame.jpg", kind: "image" as const, url: "/videos/sample-traffic.jpg", size: 2450000 },
-  { name: "Highway_Monitor_Clip.mp4", kind: "video" as const, url: "/videos/dashboard-ai-video.mp4", size: 14800000 }
+  { name: "Highway_Monitor_Clip.mp4", kind: "video" as const, url: "/videos/dashboard-ai-video.mp4", size: 14800000 },
+  { name: "Triple_Riding_Clip.mp4", kind: "video" as const, url: "/videos/triple-riding-2.mp4", size: 12500000 }
 ];
 
 export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (record: any) => void }) {
@@ -172,33 +176,29 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
 
     setIsAnalyzing(true);
     setErrorMessage(null);
-    setUploadProgress(10);
+    setUploadProgress(15);
     setProgressStage("Uploading media to AI analysis server...");
 
     try {
-      // Simulate progress stages
       const stages = [
-        { pct: 30, text: "Extracting frame vectors & temporal metadata..." },
-        { pct: 60, text: "AI is analyzing your media (Object Detection & Classifier)..." },
-        { pct: 85, text: "Evaluating violation confidence & generating insights..." }
+        { pct: 35, text: "Processing video/image frames & temporal metadata..." },
+        { pct: 60, text: "Detecting vehicles & classifying vehicle types..." },
+        { pct: 85, text: "Checking traffic compliance, signal states & visual evidence..." },
+        { pct: 95, text: "Verifying confidence thresholds & generating report..." }
       ];
 
       for (const stage of stages) {
-        await new Promise((res) => setTimeout(res, 500));
+        await new Promise((res) => setTimeout(res, 400));
         setUploadProgress(stage.pct);
         setProgressStage(stage.text);
       }
 
       let result: MediaAnalysisResult;
       if (forceClean) {
-        // Option to demonstrate "No Violations Detected" state
-        const { noViolationResult } = await import("../services/aiAnalysisService");
         result = { ...noViolationResult, mediaType: mediaKind || "image" };
       } else if (selectedFile) {
         result = await analyzeMedia(selectedFile, (pct) => setUploadProgress(pct));
       } else {
-        // Sample file fallback
-        const { fallbackImageResult, fallbackVideoResult } = await import("../services/aiAnalysisService");
         result = mediaKind === "video" ? fallbackVideoResult : fallbackImageResult;
       }
 
@@ -270,7 +270,7 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
             AI Media Analysis & Violation Detection
           </h2>
           <p className="mt-4 max-w-3xl font-body text-sm sm:text-base font-light text-white/70 leading-relaxed">
-            Upload traffic camera footage or snapshot frames. Our Computer Vision AI model automatically parses objects, identifies traffic non-compliance, and renders interactive timeline evidence.
+            Upload traffic camera footage or snapshot frames. Our evidence-based AI vision model inspects vehicle movement, traffic light signals, and rider attributes strictly without guessing.
           </p>
         </div>
 
@@ -455,8 +455,8 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
 
               {/* Progress Indicator */}
               {isAnalyzing && (
-                <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 backdrop-blur-md">
-                  <div className="flex items-center justify-between text-xs font-mono text-amber-300 mb-2">
+                <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 backdrop-blur-md space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-amber-300">
                     <span>{progressStage}</span>
                     <span>{uploadProgress}%</span>
                   </div>
@@ -544,14 +544,14 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
               <div>
                 <div className="flex items-center gap-3">
-                  <h3 className="font-heading text-3xl sm:text-4xl italic text-white">Analysis Results</h3>
+                  <h3 className="font-heading text-3xl sm:text-4xl italic text-white">AI Violation Report</h3>
                   {analysisResult.totalViolations > 0 ? (
                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 border border-red-500/40 text-red-300">
-                      {analysisResult.totalViolations} Violation{analysisResult.totalViolations > 1 ? "s" : ""} Flagged
+                      {analysisResult.totalViolations} Violation{analysisResult.totalViolations > 1 ? "s" : ""} Verified
                     </span>
                   ) : (
                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5">
-                      <CheckShieldIcon className="w-4 h-4" /> No Violations Detected
+                      <CheckShieldIcon className="w-4 h-4" /> 🟢 No Violations Detected
                     </span>
                   )}
                 </div>
@@ -564,8 +564,8 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
                   <span className="font-heading text-xl italic font-bold text-white">{analysisResult.riskLevel}</span>
                 </div>
                 <div className="px-4 py-2 rounded-2xl bg-white/5 border border-white/10 text-center">
-                  <span className="text-[10px] uppercase font-mono text-white/50 block">Detected Objects</span>
-                  <span className="font-heading text-xl italic font-bold text-white">{analysisResult.objects.length} Classes</span>
+                  <span className="text-[10px] uppercase font-mono text-white/50 block">Tracked Vehicles</span>
+                  <span className="font-heading text-xl italic font-bold text-white">{analysisResult.vehicles.length} Vehicle{analysisResult.vehicles.length !== 1 ? "s" : ""}</span>
                 </div>
               </div>
             </div>
@@ -608,55 +608,112 @@ export function AIAnalysisSection({ onSelectViolation }: { onSelectViolation?: (
               </div>
             )}
 
-            {/* Detected Violation Breakdown Cards */}
-            {analysisResult.totalViolations > 0 ? (
-              <div className="space-y-4">
-                <h4 className="font-heading text-2xl italic text-white">Detected Violation Breakdown</h4>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {analysisResult.violations.map((violation) => {
-                    const isSelected = selectedViolationId === violation.id;
-                    return (
-                      <motion.div
-                        key={violation.id}
-                        onClick={() => setSelectedViolationId(violation.id)}
-                        whileHover={{ scale: 1.01 }}
-                        className={`p-5 rounded-2xl border cursor-pointer transition-all ${
-                          isSelected
-                            ? "bg-white/15 border-amber-400 shadow-xl"
-                            : "bg-white/5 border-white/10 hover:bg-white/10"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div>
-                            <span className="text-[10px] font-mono text-white/50 uppercase">{violation.id}</span>
-                            <h5 className="font-heading text-2xl italic font-bold text-white">{violation.category}</h5>
+            {/* Vehicle-by-Vehicle Inspection Breakdown */}
+            <div className="space-y-6">
+              <h4 className="font-heading text-2xl italic text-white">Vehicle-by-Vehicle AI Inspection</h4>
+
+              {analysisResult.vehicles.map((group) => {
+                const hasViolations = group.violations.length > 0;
+                const hasManualFlags = group.manualVerificationFlags.length > 0;
+
+                return (
+                  <div
+                    key={group.vehicleId}
+                    className="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-4"
+                  >
+                    {/* Vehicle Title & Badges */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                      <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {group.vehicleId.replace("_", " ")}
+                        </span>
+                        <h5 className="font-heading text-2xl italic text-white capitalize">
+                          Vehicle Type: <strong className="text-amber-400">{group.vehicleType.replace("_", " ")}</strong>
+                        </h5>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {hasViolations ? (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/40">
+                            🔴 Violation Flagged
+                          </span>
+                        ) : hasManualFlags ? (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            🟡 Requires Manual Verification
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            🟢 Compliant (No Violation)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Confirmed Violations List */}
+                    {hasViolations ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {group.violations.map((vio) => (
+                          <div
+                            key={vio.id}
+                            className="p-4 rounded-xl bg-red-950/20 border border-red-500/30 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <h6 className="font-heading text-xl italic font-bold text-white flex items-center gap-2">
+                                🔴 {vio.category}
+                              </h6>
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-red-500/20 text-red-300 border border-red-500/40">
+                                Confidence: {vio.confidence}%
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-white/80 font-light leading-relaxed">
+                              {vio.description}
+                            </p>
+
+                            {vio.evidence && (
+                              <div className="p-2.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono space-y-1">
+                                <p className="text-white/60 text-[11px] uppercase tracking-wider">Visual Evidence:</p>
+                                <p className="text-amber-300">{vio.evidence}</p>
+                              </div>
+                            )}
+
+                            {vio.reason && (
+                              <div className="p-2.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono space-y-1">
+                                <p className="text-white/60 text-[11px] uppercase tracking-wider">Enforcement Reason:</p>
+                                <p className="text-white/90">{vio.reason}</p>
+                              </div>
+                            )}
                           </div>
-                          {getSeverityBadge(violation.severity)}
-                        </div>
+                        ))}
+                      </div>
+                    ) : null}
 
-                        <p className="text-xs text-white/80 font-light leading-relaxed mb-4">{violation.description}</p>
-
-                        <div className="flex items-center justify-between text-xs font-mono pt-3 border-t border-white/10 text-white/70">
-                          <span>Confidence: <strong className="text-amber-400">{violation.confidence}%</strong></span>
-                          {violation.formattedTime && <span>Time: <strong className="text-white">{violation.formattedTime}</strong></span>}
+                    {/* Manual Verification Flags */}
+                    {hasManualFlags ? (
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase font-mono text-amber-300">🟡 Manual Verification Flags:</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {group.manualVerificationFlags.map((flag, fIdx) => (
+                            <div key={fIdx} className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-mono space-y-1">
+                              <p className="font-bold text-amber-300">{flag.issue}</p>
+                              <p className="text-white/70">{flag.reason}</p>
+                            </div>
+                          ))}
                         </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              /* Clean State Notification */
-              <div className="p-8 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-                  <CheckShieldIcon className="w-6 h-6" />
-                </div>
-                <h4 className="font-heading text-3xl italic text-white">No Violations Detected</h4>
-                <p className="text-xs text-emerald-200/80 max-w-md mx-auto">
-                  The AI model scanned all vehicle paths and rider attributes. All movement patterns comply with standard road safety guidelines with {analysisResult.summary}
-                </p>
-              </div>
-            )}
+                      </div>
+                    ) : null}
+
+                    {/* Compliant Vehicle Banner */}
+                    {!hasViolations && !hasManualFlags && (
+                      <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono text-emerald-300 flex items-center gap-2">
+                        <CheckShieldIcon className="w-4 h-4 shrink-0" />
+                        <span>No traffic violations detected for this vehicle. All movement and compliance checks passed.</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             {/* Recommendations & Actionable Insights */}
             <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-3">

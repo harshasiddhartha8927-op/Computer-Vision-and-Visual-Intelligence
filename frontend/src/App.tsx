@@ -28,9 +28,25 @@ import { supabase, isSupabaseConfigured } from "./lib/supabaseClient";
 function getEvidenceVideoForRecord(record: ViolationRecord): string | undefined {
   if (record.evidence_video_url) return record.evidence_video_url;
   const v = (record.violation || "").toLowerCase();
-  if (v.includes("helmet")) return "/videos/no-helmet.mp4";
+  const id = (record.id || "").toLowerCase();
+  const veh = (record.vehicle || "").toLowerCase();
+  if (v.includes("helmet")) {
+    if (id.includes("2045") || id.includes("2049") || id.includes("2043") || id.includes("tvi")) {
+      return "/videos/no-helmet-2.mp4";
+    }
+    return "/videos/no-helmet.mp4";
+  }
   if (v.includes("red")) return "/videos/red-light.mp4";
+  if (v.includes("stop") || v.includes("line")) return "/videos/stop-line.mp4";
+  if (v.includes("park")) return "/videos/illegal-parking.mp4";
+  if (v.includes("phone") || v.includes("mobile")) {
+    if (veh.includes("auto") || id.includes("8833")) {
+      return "/videos/auto-phone-usage.mp4";
+    }
+    return "/videos/phone-usage.mp4";
+  }
   if (v.includes("triple")) return "/videos/triple-riding.mp4";
+  if (v.includes("wrong") || v.includes("lane") || v.includes("route") || v.includes("side")) return "/videos/wrong-side-driving.mp4";
   return undefined;
 }
 
@@ -982,7 +998,26 @@ function LiveMonitor() {
   );
 }
 
+function getVideoForCamera(camera: CameraFeed): string {
+  const id = (camera.id || "").toLowerCase();
+  const alert = (camera.alert || "").toLowerCase();
+  const loc = (camera.location || "").toLowerCase();
+
+  if (id.includes("18") || loc.includes("market") || alert.includes("triple")) {
+    return "/videos/triple-riding-2.mp4";
+  }
+  if (id.includes("12") || loc.includes("eastbound") || alert.includes("red")) {
+    return "/videos/eastbound-signal.mp4";
+  }
+  if (id.includes("07") || alert.includes("helmet")) {
+    return "/videos/no-helmet.mp4";
+  }
+  return "/videos/triple-riding-2.mp4";
+}
+
 function CameraCard({ camera }: { camera: CameraFeed }) {
+  const videoUrl = getVideoForCamera(camera);
+
   return (
     <article className="liquid-glass flex min-h-[460px] flex-col rounded-[1.25rem] p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -992,7 +1027,7 @@ function CameraCard({ camera }: { camera: CameraFeed }) {
         </div>
         <StatusPill active>LIVE</StatusPill>
       </div>
-      <DetectionFrame boxes={camera.boxes} label={camera.alert} className="min-h-[230px]" dense />
+      <DetectionFrame boxes={camera.boxes} label={camera.alert} className="min-h-[230px]" dense videoUrl={videoUrl} />
       <div className="mt-4 grid grid-cols-2 gap-3">
         <MetricMini label="Traffic density" value={camera.density} />
         <MetricMini label="Vehicles" value={String(camera.vehicles)} />
@@ -1201,6 +1236,7 @@ function History({ onSelectViolation }: { onSelectViolation: (record: ViolationR
                   <option>No Helmet</option>
                   <option>Red Light Violation</option>
                   <option>Triple Riding</option>
+                  <option>Wrong-Side Driving</option>
                 </select>
               </label>
               <label className="filter-field">

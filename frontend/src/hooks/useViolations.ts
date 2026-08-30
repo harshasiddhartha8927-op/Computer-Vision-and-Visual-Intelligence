@@ -52,7 +52,7 @@ export function useViolations(filters: ViolationFilters = {}): UseViolationsResu
       try {
         let query = supabase
           .from("violation_records")
-          .select("id,violation,vehicle,plate,location,camera,detected_at,confidence,status,severity,source,ai_summary,risk_level")
+          .select("id,violation,vehicle,plate,location,camera,detected_at,confidence,status,severity,source,ai_summary,risk_level,evidence_video_url")
           .order("detected_at", { ascending: false })
           .limit(filters.limit ?? 100);
 
@@ -132,6 +132,7 @@ function rowToViolationRecord(row: any): ViolationRecord {
     confidence: Number(row.confidence),
     status: row.status,
     severity: row.severity,
+    evidence_video_url: row.evidence_video_url,
   };
 }
 

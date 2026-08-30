@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { saveAnalysisResult } from "./supabase.js";
 
-const DEFAULT_MODEL = "gemini-3.7-flash";
-const DEFAULT_FALLBACK_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_FALLBACK_MODEL = "gemini-2.0-flash";
 const MAX_BODY_BYTES = 110 * 1024 * 1024;
 
 const fallbackAnalysis = {
@@ -79,33 +79,58 @@ export function loadLocalEnv(rootDir = process.cwd()) {
 }
 
 function buildPrompt(payload = {}) {
-  const source = payload.source || "Traffic camera sample";
+  const source = payload.source || "Uploaded traffic media";
   const media = payload.media;
-  const context = payload.context || {};
   const mediaKind = getMediaInputType(media?.mimeType);
 
   return `
-Analyze this traffic scene for a Traffic Violation Intelligence dashboard.
+You are an expert AI Traffic Violation Enforcement system.
+Examine the attached ${mediaKind || "media"} (${source}) frame by frame.
 
-Input source: ${source}
-${media ? `Uploaded media: ${media.name || "unnamed file"} (${media.mimeType || "unknown type"}, ${media.size || 0} bytes). ${media.data && mediaKind ? `The ${mediaKind} is attached to this request; analyze the actual visual content first.` : "Only metadata is available for this media."}` : ""}
-Mock scene telemetry:
-${JSON.stringify(context, null, 2)}
+TASK:
+1. Detect and list all visible primary vehicles (Car, Motorcycle, Scooter, Bus, Truck, Auto-rickshaw, Bicycle).
+2. For each vehicle, carefully analyze its movement, lane position, driving direction, signal compliance, helmet usage (for two-wheelers), and traffic rules.
+3. Check for specific violations:
+   - Wrong-Side Driving / Wrong Route (driving against traffic flow, opposing lane, wrong direction on road/divider)
+   - Illegal Turn / Unsafe Lane Change (sharp turn across solid lines, turning from wrong lane, cutting off traffic)
+   - Red Light Crossing (crossing stop line / intersection during red signal)
+   - Helmet Violation (unhelmeted two-wheeler rider/pillion)
+   - Triple Riding (3+ occupants on a motorcycle/scooter)
+   - Stop Line Jump (stopping beyond stop line at red signal)
 
-Return only valid JSON using this schema:
+STRICT RULES:
+- Helmet violations apply ONLY to two-wheelers ("motorcycle", "scooter", "bicycle"). NEVER assign a helmet violation to a car, bus, truck, or auto-rickshaw.
+- Observe traffic lanes and movement of surrounding vehicles. If a vehicle travels in the direction opposite to established traffic flow, on the wrong side of the divider, or makes an illegal turn across solid lines, flag it as a violation.
+- If rider head area is obscured or blurred, do NOT guess. Place in "manual_verification_flags".
+
+Return ONLY valid JSON matching this schema:
 {
-  "riskLevel": "Low | Moderate | High | Critical",
-  "summary": "One concise traffic intelligence summary.",
-  "detectedViolations": [
-    { "label": "Helmet Violations", "value": "3", "confidence": 97 }
+  "analysis_status": "success",
+  "vehicles": [
+    {
+      "vehicle_id": "vehicle_1",
+      "vehicle_type": "car",
+      "vehicle_description": "Dark grey hatchback",
+      "violations": [
+        {
+          "type": "wrong_side_driving",
+          "category_name": "Wrong-Side Driving / Illegal Turn",
+          "confidence": 94,
+          "evidence": "Vehicle crossed solid lines and traveled against the direction of oncoming traffic at 00:00:05.",
+          "reason": "Executed an unsafe maneuver entering the opposing lane.",
+          "timestamp": 5,
+          "formatted_time": "00:00:05"
+        }
+      ],
+      "manual_verification_flags": []
+    }
   ],
   "objects": [
-    { "label": "Vehicles", "count": 14, "confidence": 98 }
+    { "label": "Vehicles", "count": 2, "confidence": 96 }
   ],
-  "recommendations": ["Recommended action"]
+  "overall_summary": "Concise summary of observed traffic flow and detected violations.",
+  "riskLevel": "Low | Moderate | High | Critical"
 }
-
-Use realistic traffic enforcement language. If the input is only a sample source or metadata, infer a plausible demo analysis from the telemetry.
 `.trim();
 }
 
@@ -244,27 +269,139 @@ function clampConfidence(value, fallback) {
 
 function normalizeAnalysis(rawAnalysis) {
   const source = rawAnalysis && typeof rawAnalysis === "object" ? rawAnalysis : {};
-  const detectedViolations = Array.isArray(source.detectedViolations) ? source.detectedViolations : fallbackAnalysis.detectedViolations;
-  const objects = Array.isArray(source.objects) ? source.objects : fallbackAnalysis.objects;
-  const recommendations = Array.isArray(source.recommendations) ? source.recommendations : fallbackAnalysis.recommendations;
+  const status = typeof source.analysis_status === "string" ? source.analysis_status : "success";
+  const rawVehicles = Array.isArray(source.vehicles) ? source.vehicles : [];
+
+  const NON_HELMET_VEHICLES = ["car", "bus", "truck", "auto_rickshaw", "auto-rickshaw", "sedan", "hatchback", "suv", "other"];
+
+  // Normalize vehicles and filter vehicle-type mismatches
+  const vehicles = rawVehicles.map((v, vIdx) => {
+    const vId = typeof v.vehicle_id === "string" && v.vehicle_id.trim() ? v.vehicle_id.trim() : `vehicle_${vIdx + 1}`;
+    const vType = typeof v.vehicle_type === "string" ? v.vehicle_type.toLowerCase().replace(/[\s-]/g, "_") : "other";
+
+    const rawViolations = Array.isArray(v.violations) ? v.violations : [];
+    const validViolations = [];
+    const manualFlags = Array.isArray(v.manual_verification_flags) ? [...v.manual_verification_flags] : [];
+
+    for (const item of rawViolations) {
+      const type = (item.type || "").toLowerCase().replace(/[\s-]/g, "_");
+      const categoryName = item.category_name || item.label || item.type || "Violation";
+      const confidence = clampConfidence(item.confidence, 85);
+
+      // STRICT RULE: Helmet violations cannot belong to 4-wheelers/cars/buses/trucks/auto-rickshaws
+      if ((type.includes("helmet") || categoryName.toLowerCase().includes("helmet")) && NON_HELMET_VEHICLES.includes(vType)) {
+        console.warn(`[Gemini Normalizer] Discarded hallucinated helmet violation for non-2-wheeler (${vType})`);
+        manualFlags.push({
+          issue: "Helmet status not applicable",
+          reason: `Vehicle type ${vType} is enclosed/non-two-wheeler.`
+        });
+        continue;
+      }
+
+      // Confidence threshold: < 75% goes to manual flags instead of confirmed violations
+      if (confidence < 75) {
+        manualFlags.push({
+          issue: `Potential ${categoryName} (${confidence}% confidence)`,
+          reason: item.reason || item.evidence || "Low confidence detection below threshold."
+        });
+        continue;
+      }
+
+      validViolations.push({
+        type: type || "unknown_violation",
+        category_name: categoryName,
+        confidence,
+        evidence: typeof item.evidence === "string" && item.evidence.trim() ? item.evidence.trim() : "Visual evidence observed in frame.",
+        reason: typeof item.reason === "string" && item.reason.trim() ? item.reason.trim() : "Adheres to traffic enforcement detection criteria.",
+        timestamp: Number.isFinite(Number(item.timestamp)) ? Number(item.timestamp) : undefined,
+        formatted_time: typeof item.formatted_time === "string" ? item.formatted_time : undefined
+      });
+    }
+
+    return {
+      vehicle_id: vId,
+      vehicle_type: vType,
+      violations: validViolations,
+      manual_verification_flags: manualFlags
+    };
+  });
+
+  // Flatten detected violations for backwards compatibility
+  const detectedViolations = [];
+  for (const v of vehicles) {
+    for (const vio of v.violations) {
+      detectedViolations.push({
+        label: vio.category_name,
+        value: "1",
+        confidence: vio.confidence,
+        vehicle_id: v.vehicle_id,
+        vehicle_type: v.vehicle_type,
+        evidence: vio.evidence,
+        reason: vio.reason,
+        timestamp: vio.timestamp,
+        formatted_time: vio.formatted_time
+      });
+    }
+  }
+
+  // Handle legacy format fallback if Gemini returns raw detectedViolations instead of vehicles array
+  if (vehicles.length === 0 && Array.isArray(source.detectedViolations)) {
+    const sanitizedLegacy = source.detectedViolations.filter((item) => {
+      const label = (item.label || "").toLowerCase();
+      if (label.includes("helmet") && clampConfidence(item.confidence, 90) < 75) return false;
+      return true;
+    });
+
+    return {
+      source: "gemini",
+      analysis_status: sanitizedLegacy.length > 0 ? "success" : "no_violations_detected",
+      riskLevel: typeof source.riskLevel === "string" ? source.riskLevel : "Low",
+      summary: typeof source.summary === "string" && source.summary.trim() ? source.summary.trim() : "Traffic analysis complete.",
+      vehicles: [
+        {
+          vehicle_id: "vehicle_1",
+          vehicle_type: "vehicle",
+          violations: sanitizedLegacy.map((item) => ({
+            type: (item.label || "").toLowerCase().replace(/[\s-]/g, "_"),
+            category_name: item.label || "Detected Violation",
+            confidence: clampConfidence(item.confidence, 90),
+            evidence: item.evidence || "Detected in input media.",
+            reason: item.reason || "Visual detection satisfied threshold criteria."
+          })),
+          manual_verification_flags: []
+        }
+      ],
+      detectedViolations: sanitizedLegacy.map((item) => ({
+        label: typeof item.label === "string" ? item.label : "Violation",
+        value: String(item.value ?? "1"),
+        confidence: clampConfidence(item.confidence, 90)
+      })),
+      objects: Array.isArray(source.objects) ? source.objects : [],
+      recommendations: Array.isArray(source.recommendations) ? source.recommendations : []
+    };
+  }
+
+  const totalViolationsCount = detectedViolations.length;
+  const computedRiskLevel = totalViolationsCount >= 2 ? "High" : totalViolationsCount === 1 ? "Moderate" : "Low";
 
   return {
     source: "gemini",
-    riskLevel: typeof source.riskLevel === "string" ? source.riskLevel : fallbackAnalysis.riskLevel,
-    summary: typeof source.summary === "string" && source.summary.trim() ? source.summary.trim() : fallbackAnalysis.summary,
-    detectedViolations: detectedViolations.slice(0, 5).map((item, index) => ({
-      label: typeof item.label === "string" && item.label.trim() ? item.label.trim() : fallbackAnalysis.detectedViolations[index]?.label || "Detected Violation",
-      value: String(item.value ?? fallbackAnalysis.detectedViolations[index]?.value ?? "1"),
-      confidence: clampConfidence(item.confidence, fallbackAnalysis.detectedViolations[index]?.confidence ?? 90)
-    })),
-    objects: objects.slice(0, 6).map((item, index) => ({
-      label: typeof item.label === "string" && item.label.trim() ? item.label.trim() : fallbackAnalysis.objects[index]?.label || "Object",
-      count: Number.isFinite(Number(item.count)) ? Number(item.count) : fallbackAnalysis.objects[index]?.count || 1,
-      confidence: clampConfidence(item.confidence, fallbackAnalysis.objects[index]?.confidence ?? 90)
-    })),
-    recommendations: recommendations
-      .filter((item) => typeof item === "string" && item.trim())
-      .slice(0, 4)
+    analysis_status: status,
+    riskLevel: source.riskLevel || computedRiskLevel,
+    summary: typeof source.summary === "string" && source.summary.trim()
+      ? source.summary.trim()
+      : typeof source.overall_summary === "string" && source.overall_summary.trim()
+      ? source.overall_summary.trim()
+      : totalViolationsCount > 0
+      ? `${totalViolationsCount} traffic violation(s) identified with visual evidence.`
+      : "No traffic violations were reliably detected in the uploaded media.",
+    vehicles,
+    detectedViolations,
+    objects: Array.isArray(source.objects) ? source.objects : [],
+    recommendations: Array.isArray(source.recommendations) ? source.recommendations : [
+      "Review evidence frame details before issuing enforcement notice.",
+      "Verify vehicle registration plate with transport authority records."
+    ]
   };
 }
 
@@ -289,24 +426,41 @@ export async function analyzeTrafficWithGemini(payload = {}, env = process.env) 
     let response;
     const timeoutMs = getModelTimeoutMs(payload, env, modelIndex, models.length);
 
+    const promptText = buildPrompt(payload);
+    const media = payload.media || {};
+    const mediaType = getMediaInputType(media.mimeType);
+
+    const parts = [];
+    if (media.data && mediaType) {
+      parts.push({
+        inlineData: {
+          mimeType: media.mimeType,
+          data: sanitizeBase64Data(media.data)
+        }
+      });
+    }
+    parts.push({ text: promptText });
+
+    const requestBody = {
+      contents: [
+        {
+          parts
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json"
+      }
+    };
+
     try {
-      response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
+          "Content-Type": "application/json"
         },
         signal: getTimeoutSignal(timeoutMs),
-        body: JSON.stringify({
-          model: modelName,
-          store: false,
-          system_instruction:
-            "You are a computer vision traffic violation analysis service. Return strict JSON only. Do not include markdown, commentary, or code fences.",
-          input: buildGeminiInput(payload),
-          generation_config: {
-            temperature: 0.2
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
     } catch (error) {
       const isTimeout = error?.name === "TimeoutError" || error?.name === "AbortError";
