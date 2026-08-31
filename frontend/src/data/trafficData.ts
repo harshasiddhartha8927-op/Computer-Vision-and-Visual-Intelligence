@@ -37,6 +37,7 @@ export type ViolationRecord = {
   confidence: number;
   status: string;
   severity: string;
+  evidence_video_url?: string;
 };
 
 export const heroStats = [

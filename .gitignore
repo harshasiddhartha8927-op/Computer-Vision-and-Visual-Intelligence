@@ -20,4 +20,5 @@ backend/.env.*.local
 *.log
 
 # Data / uploads
-data
+/data
+
